@@ -3,40 +3,34 @@ const std = @import("std");
 const Io = std.Io;
 const Uri = std.Uri;
 
-const Connection = @import("connection.zig").Connection;
+const testing = std.testing;
+const expectEqual = testing.expectEqual;
+
+pub const Connection = @import("connection.zig").Connection;
 const Config = @import("config.zig").Config;
 const Frontend = @import("frontend.zig").Frontend;
 
 const text: []const u8 = "postgres://postgres:pass@127.0.0.1:5432/pgdb";
 
-test "Config init" {
-    var cfg: Config = .{};
-    try cfg.parseURI(text);
-
-    try std.testing.expectEqualStrings(cfg.scheme.?, "postgres");
-    try std.testing.expectEqualStrings(cfg.user.?, "postgres");
-    try std.testing.expectEqualStrings(cfg.password.?, "pass");
-    try std.testing.expectEqualStrings(cfg.host.?, "127.0.0.1");
-    try std.testing.expectEqual(cfg.port.?, 5432);
-    try std.testing.expectEqualStrings(cfg.db.?, "pgdb");
-
-    std.debug.print("test \"Config init\" OK!\n", .{});
-}
-
 test "Connection init" {
-    var cfg: Config = .{};
-    try cfg.parseURI(text);
-    var threaded: std.Io.Threaded = .init(std.testing.allocator, .{});
+    var threaded: std.Io.Threaded = .init(testing.allocator, .{});
     defer threaded.deinit();
-
     const io = threaded.io();
 
-    var conn = try Connection.init(io, cfg.host.?, cfg.port.?);
-    defer conn.deinit();
+    const alloc = std.testing.allocator;
 
-    try conn.startupMsg(conn.frontend.writer, cfg.user.?, cfg.db.?);
+    var conn: Connection = try .init(alloc, io, text);
+    defer conn.deinit(alloc);
 
-    _ = try conn.frontend.reader.take(5);
+    try conn.startupMsg(conn.frontend.writer, conn.cfg.user.?, conn.cfg.db);
+
+    const bytes = try conn.frontend.reader.take(9);
+    const size = std.mem.readVarInt(u32, bytes[1..5], .big);
+    const auth = std.mem.readVarInt(u32, bytes[5..9], .big);
+
+    try expectEqual('R', bytes[0]);
+    try expectEqual(8, size);
+    try expectEqual(0, auth);
 
     try conn.frontend.writer.writeByte('X');
     try conn.frontend.writer.writeInt(u32, 4, .big);

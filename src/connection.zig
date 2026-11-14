@@ -3,8 +3,12 @@ const Io = std.Io;
 const net = Io.net;
 const Uri = std.Uri;
 const fmt = std.fmt;
+const log = std.log;
+const debug = std.debug;
+const Allocator = std.mem.Allocator;
 
 const Frontend = @import("frontend.zig").Frontend;
+const Config = @import("config.zig").Config;
 
 // Protocol version 3.0 or 196608
 const protocol: i32 = (3 << 16) | 0;
@@ -13,15 +17,20 @@ const protocol: i32 = (3 << 16) | 0;
 /// r/w runs through here
 /// For low-level see Frontend.zig
 pub const Connection = struct {
+    cfg: *Config,
+    frontend: Frontend,
     addr: net.IpAddress,
     io: Io,
     stream: net.Stream,
-    frontend: Frontend,
+    uri: Uri,
 
     /// Initialize the Connection struct.
     /// Check the prefix of the URI, resolve the address, make TCP connection.
-    pub fn init(io: Io, host: []const u8, port: u16) !Connection {
-        const addr = try net.IpAddress.resolve(io, host, port);
+    pub fn init(alloc: Allocator, io: Io, text: []const u8) !Connection {
+        var uri = try Uri.parse(text);
+        uri.path.percent_encoded = std.mem.trim(u8, uri.path.percent_encoded, "/");
+
+        const addr = try net.IpAddress.resolve(io, uri.host.?.percent_encoded, uri.port.?);
         const stream = try net.IpAddress.connect(&addr, io, .{
             .mode = .stream,
             .protocol = .tcp,
@@ -32,18 +41,22 @@ pub const Connection = struct {
         // but keeps some consistency/clean.
         errdefer stream.close(io);
 
-        const frontend = try Frontend.init(io, stream);
+        const cfg: *Config = try .init(alloc, text);
+        const frontend: Frontend = try .init(io, stream);
 
         return .{
+            .cfg = cfg,
+            .frontend = frontend,
             .addr = addr,
             .io = io,
             .stream = stream,
-            .frontend = frontend,
+            .uri = uri,
         };
     }
 
-    pub fn deinit(self: *Connection) void {
+    pub fn deinit(self: *Connection, alloc: Allocator) void {
         self.stream.close(self.io);
+        self.cfg.deinit(alloc);
     }
 
     pub fn startupMsg(_: *const Connection, writer: *Io.Writer, user: []const u8, db: []const u8) !void {
