@@ -6,8 +6,8 @@ const Alloc = std.mem.Allocator;
 pub const Frontend = struct {
     // for now both buffers will be set to 512 bytes
     // INFO: Postgres start with 8192. May do the same in the future
-    w_buf: [512]u8 = undefined,
-    r_buf: [512]u8 = undefined,
+    w_buf: [1024]u8 = undefined,
+    r_buf: [1024]u8 = undefined,
 
     writer: *Io.Writer,
     reader: *Io.Reader,

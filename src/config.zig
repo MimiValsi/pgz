@@ -20,24 +20,24 @@ pub const ParseError = error{
 /// port = 5432 | Postgres default port
 pub const Config = struct {
     scheme: []u8 = undefined,
-    user: ?[]u8 = null,
+    user: []u8 = undefined,
     password: ?[]u8 = null,
-    host: ?[]u8 = null,
-    port: ?u16 = null,
+    host: []u8 = undefined,
+    port: u16 = undefined,
     db: []u8 = undefined,
 
     /// Set the Config fields with their respective data.
     /// This is used to set a connection
     /// It can be usefull to check the different parameters when needed
-    pub fn init(alloc: Allocator, text: []const u8) ParseError!*Config {
+    pub fn init(alloc: Allocator, text: []const u8) ParseError!Config {
         if (!mem.startsWith(u8, text, "postgres://") and
             !mem.startsWith(u8, text, "postgresql://"))
         {
             return error.BadScheme;
         }
 
-        const self: *Config = try alloc.create(Config);
-        errdefer self.deinit(alloc);
+        var self: Config = .{};
+        // errdefer self.deinit(alloc);
 
         const uri = Uri.parse(text) catch return error.InvalidUri;
 
@@ -47,20 +47,22 @@ pub const Config = struct {
         @memcpy(self.scheme, uri.scheme);
 
         const user = uri.user orelse return error.MissingUser;
-        self.user.? = try alloc.alloc(u8, user.percent_encoded.len);
-        @memcpy(self.user.?, user.percent_encoded);
+        self.user = try alloc.alloc(u8, user.percent_encoded.len);
+        @memcpy(self.user, user.percent_encoded);
+        std.debug.print("self.user: {any}\n", .{self.user});
 
         // password is optional for must cases
         if (uri.password) |pw| {
-            self.password.? = try alloc.alloc(u8, pw.percent_encoded.len);
+            self.password = try alloc.alloc(u8, pw.percent_encoded.len);
             @memcpy(self.password.?, pw.percent_encoded);
         }
+        // std.debug.print("self.password: {any}", .{self.password});
 
         const host = uri.host orelse return error.MissingHost;
         self.host = try alloc.alloc(u8, host.percent_encoded.len);
-        @memcpy(self.host.?, host.percent_encoded);
+        @memcpy(self.host, host.percent_encoded);
 
-        self.port.? = uri.port orelse return error.MissingPort;
+        self.port = uri.port orelse return error.MissingPort;
 
         // path is the tricky even the stupid one.
         // Dunno why they did this, but the `isEmpty()` method is cool
@@ -78,21 +80,12 @@ pub const Config = struct {
 
     pub fn deinit(self: *Config, alloc: Allocator) void {
         alloc.free(self.scheme);
-
-        if (self.user != null) {
-            alloc.free(self.user.?);
-        }
-
-        if (self.host != null) {
-            alloc.free(self.host.?);
-        }
+        alloc.free(self.user);
+        alloc.free(self.host);
+        alloc.free(self.db);
 
         if (self.password != null) {
             alloc.free(self.password.?);
         }
-
-        alloc.free(self.db);
-
-        alloc.destroy(self);
     }
 };

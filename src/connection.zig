@@ -17,20 +17,19 @@ const protocol: i32 = (3 << 16) | 0;
 /// r/w runs through here
 /// For low-level see Frontend.zig
 pub const Connection = struct {
-    cfg: *Config,
+    cfg: Config,
     frontend: Frontend,
     addr: net.IpAddress,
     io: Io,
     stream: net.Stream,
-    uri: Uri,
 
     /// Initialize the Connection struct.
     /// Check the prefix of the URI, resolve the address, make TCP connection.
     pub fn init(alloc: Allocator, io: Io, text: []const u8) !Connection {
-        var uri = try Uri.parse(text);
-        uri.path.percent_encoded = std.mem.trim(u8, uri.path.percent_encoded, "/");
+        const cfg: Config = try .init(alloc, text);
+        // errdefer cfg.deinit(alloc);
 
-        const addr = try net.IpAddress.resolve(io, uri.host.?.percent_encoded, uri.port.?);
+        const addr = try net.IpAddress.resolve(io, cfg.host, cfg.port);
         const stream = try net.IpAddress.connect(&addr, io, .{
             .mode = .stream,
             .protocol = .tcp,
@@ -38,10 +37,9 @@ pub const Connection = struct {
         });
 
         // defer only on error. This is really not necessary per-se
-        // but keeps some consistency/clean.
+        // but keeps some consistency/clean behavior.
         errdefer stream.close(io);
 
-        const cfg: *Config = try .init(alloc, text);
         const frontend: Frontend = try .init(io, stream);
 
         return .{
@@ -50,7 +48,6 @@ pub const Connection = struct {
             .addr = addr,
             .io = io,
             .stream = stream,
-            .uri = uri,
         };
     }
 

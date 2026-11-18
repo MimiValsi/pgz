@@ -10,9 +10,9 @@ pub const Connection = @import("connection.zig").Connection;
 const Config = @import("config.zig").Config;
 const Frontend = @import("frontend.zig").Frontend;
 
-const text: []const u8 = "postgres://postgres:pass@127.0.0.1:5432/pgdb";
-
 test "Connection init" {
+    const text: []const u8 = "postgres://postgres@127.0.0.1:5432/pgdb";
+
     var threaded: std.Io.Threaded = .init(testing.allocator, .{});
     defer threaded.deinit();
     const io = threaded.io();
@@ -22,7 +22,7 @@ test "Connection init" {
     var conn: Connection = try .init(alloc, io, text);
     defer conn.deinit(alloc);
 
-    try conn.startupMsg(conn.frontend.writer, conn.cfg.user.?, conn.cfg.db);
+    try conn.startupMsg(conn.frontend.writer, conn.cfg.user, conn.cfg.db);
 
     const bytes = try conn.frontend.reader.take(9);
     const size = std.mem.readVarInt(u32, bytes[1..5], .big);
@@ -36,5 +36,27 @@ test "Connection init" {
     try conn.frontend.writer.writeInt(u32, 4, .big);
     try conn.frontend.writer.flush();
 
-    std.debug.print("test \"Connection init\" OK!\n ", .{});
+    std.debug.print("test \"Connection init\" OK!\n", .{});
+}
+
+test "No user set" {
+    // const text: []const u8 = "postgres://user:@127.0.0.1:5432/pgdb";
+    //
+    // const uri = try std.Uri.parse(text);
+    //
+    // std.debug.print("uri.pass: {any}", .{uri.password});
+
+    // var threaded: std.Io.Threaded = .init(testing.allocator, .{});
+    // defer threaded.deinit();
+    // const io = threaded.io();
+    //
+    // const alloc = std.testing.allocator;
+    //
+    // var conn: Connection = try .init(alloc, io, text);
+    // defer conn.deinit(alloc);
+    //
+    // std.debug.print("uri: {}\n", .{conn.uri});
+    // std.debug.print("user: {s}\n", .{conn.cfg.user.?});
+    //
+    // std.debug.print("test \"No user set\" OK!\n", .{});
 }
